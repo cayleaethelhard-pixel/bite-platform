@@ -10,20 +10,20 @@ const dashboardRoutes = require('./routes/dashboard');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// ✅ Configure CORS to allow your frontend origin
+const corsOptions = {
+  origin: [
+    'http://localhost:3000', // for local dev
+    'https://bite-platform-frontend.onrender.com' // ← REPLACE with your actual frontend URL
+  ],
+  credentials: true
+};
+app.use(cors(corsOptions));
 
 // Middleware
-app.use(cors());
 app.use(express.json({ limit: '10mb' })); // Increase limit for profile pictures
 // Add this after your existing middleware
-if (process.env.NODE_ENV === 'production') {
-  // Serve static files from client build
-  app.use(express.static(path.join(__dirname, '../client/build')));
-  
-  // Handle SPA routing
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, '../client/build', 'index.html'));
-  });
-}
+
 
 // Routes
 app.use('/api/auth', authRoutes);       
