@@ -11,14 +11,13 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ✅ Configure CORS to allow your frontend origin
-const corsOptions = {
+app.use(cors({
   origin: [
     'http://localhost:3000', // for local dev
     'https://bite-platform-frontend.onrender.com' // ← REPLACE with your actual frontend URL
   ],
   credentials: true
-};
-app.use(cors(corsOptions));
+}));
 
 // Middleware
 app.use(express.json({ limit: '10mb' })); // Increase limit for profile pictures
