@@ -1,6 +1,6 @@
 // src/services/api.js
 const API_BASE_URL = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'production' 
-    ? 'https://your-backend-service.onrender.com/api'
+    ? 'https://bite-platform-backend.onrender.com/api'
     : 'http://localhost:5000/api');
 
 export const api = {
@@ -34,6 +34,17 @@ export const api = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ email }),
+    });
+    return response.json();
+  },
+
+    resetPassword: async ({ token, password }) => {
+    const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ token, password }),
     });
     return response.json();
   },

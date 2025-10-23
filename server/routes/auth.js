@@ -4,7 +4,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 require('dotenv').config();
-
+const crypto = require('crypto');
+const { sendPasswordResetEmail } = require('../utils/sendEmail');
 const router = express.Router();
 
 // Helper function to upload profile picture (for now, we'll store as base64)
@@ -18,7 +19,7 @@ const uploadProfilePicture = async (fileData) => {
 // Register route - handles complete registration flow
 router.post('/register', async (req, res) => {
   const client = await db.pool.connect();
-  
+
   try {
     const {
       // Personal info
@@ -29,11 +30,11 @@ router.post('/register', async (req, res) => {
       city,
       country,
       profilePicture,
-      
+
       // Role and tier
       role,
       tier,
-      
+
       // Role-specific data
       studentData,
       startupData,
@@ -43,8 +44,8 @@ router.post('/register', async (req, res) => {
 
     // Validate required fields
     if (!fullName || !email || !password || !role || !tier) {
-      return res.status(400).json({ 
-        error: 'Missing required personal information fields' 
+      return res.status(400).json({
+        error: 'Missing required personal information fields'
       });
     }
 
@@ -53,10 +54,10 @@ router.post('/register', async (req, res) => {
       'SELECT id FROM users WHERE email = $1',
       [email]
     );
-    
+
     if (emailCheck.rows.length > 0) {
-      return res.status(409).json({ 
-        error: 'Email already registered' 
+      return res.status(409).json({
+        error: 'Email already registered'
       });
     }
 
@@ -96,7 +97,7 @@ router.post('/register', async (req, res) => {
           studentData.portfolioUrl || null
         ]
       );
-    } 
+    }
     else if (role === 'startup' && startupData) {
       await client.query(
         `INSERT INTO startup_profiles 
@@ -177,9 +178,9 @@ router.post('/register', async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Registration error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Registration failed',
-      details: error.message 
+      details: error.message
     });
   } finally {
     client.release();
@@ -237,7 +238,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Forgot password route (sends reset link)
+// Replace the existing /forgot-password route with this:
 router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
@@ -246,29 +247,79 @@ router.post('/forgot-password', async (req, res) => {
       return res.status(400).json({ error: 'Email is required' });
     }
 
-    // Check if user exists
     const userResult = await db.query(
       'SELECT id FROM users WHERE email = $1',
       [email]
     );
 
     if (userResult.rows.length === 0) {
-      // Don't reveal if email exists or not for security
+      // Still return success to prevent email enumeration
       return res.json({ message: 'If your email is registered, you will receive a password reset link' });
     }
 
-    // In production, you would:
-    // 1. Generate a password reset token
-    // 2. Store it in database with expiration
-    // 3. Send email with reset link
-    
-    // For now, just simulate success
-    console.log(`Password reset link would be sent to: ${email}`);
-    res.json({ message: 'If your email is registered, you will receive a password reset link' });
+    // Generate secure random token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpires = new Date(Date.now() + 3600000); // 1 hour
 
+    // Save token to DB
+    await db.query(
+      'UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE email = $3',
+      [resetToken, resetTokenExpires, email]
+    );
+
+    // Send email
+    await sendPasswordResetEmail(email, resetToken);
+
+    res.json({ message: 'If your email is registered, you will receive a password reset link' });
   } catch (error) {
     console.error('Forgot password error:', error);
     res.status(500).json({ error: 'Password reset request failed' });
+  }
+});
+
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token and new password are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    // Find user by token and check expiry
+    const userResult = await db.query(
+      `SELECT id, reset_token_expires FROM users 
+       WHERE reset_token = $1`,
+      [token]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    const user = userResult.rows[0];
+    if (new Date() > new Date(user.reset_token_expires)) {
+      return res.status(400).json({ error: 'Reset token has expired' });
+    }
+
+    // Hash new password
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    // Update password and clear token
+    await db.query(
+      `UPDATE users 
+       SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL 
+       WHERE reset_token = $2`,
+      [passwordHash, token]
+    );
+
+    res.json({ success: true, message: 'Password has been reset successfully' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 

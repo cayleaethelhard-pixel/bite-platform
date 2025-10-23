@@ -4,7 +4,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const authRoutes = require('./routes/auth');
 const path = require('path');
-// Load environment variables
+const settingsRoutes = require('./routes/settings');
 dotenv.config();
 const dashboardRoutes = require('./routes/dashboard');
 const app = express();
@@ -27,7 +27,8 @@ if (process.env.NODE_ENV === 'production') {
 
 // Routes
 app.use('/api/auth', authRoutes);       
-app.use('/api', dashboardRoutes);        
+app.use('/api', dashboardRoutes);  
+app.use('/api/settings', settingsRoutes);      
 
 // Test route
 app.get('/', (req, res) => {
